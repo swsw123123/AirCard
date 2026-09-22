@@ -1,0 +1,58 @@
+name: Build AirCard-iOS IPA
+
+# 手動実行のみ。push/PR等の自動トリガーは付けない
+# （意図しない連続実行でビルド時間を浪費しないため）
+on:
+  workflow_dispatch:
+
+# 同時実行を1つに制限し、古い実行が残っていればキャンセルする
+concurrency:
+  group: build-ipa
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # 2026年時点の macos-latest は macOS 15 (arm64) 相当で、
+    # Xcode 16.x が複数バージョンプリインストールされている
+    runs-on: macos-latest
+
+    # 暴走・ハング対策のセーフティネット（想定は数分〜十数分）
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        # READMEのRequirements（Xcode 16+）を満たすバージョンを明示指定。
+        # ランナーに未搭載の場合はここでエラーになるので、
+        # 失敗したら https://github.com/actions/runner-images の
+        # macos-*-Readme.md で搭載済みバージョン一覧を確認して差し替える
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.4"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # rust-core を変更していない限り、リポジトリに同梱済みの
+      # AirliftFFI.xcframework で足りるため、Rustツールチェインの
+      # インストールは不要（同梱物を変更した場合のみ有効化する）
+      # - name: Install Rust toolchain
+      #   run: |
+      #     curl https://sh.rustup.rs -sSf | sh -s -- -y
+      #     source "$HOME/.cargo/env"
+      #     rustup target add aarch64-apple-ios
+
+      - name: Build IPA
+        run: |
+          chmod +x build-ipa.sh
+          ./build-ipa.sh
+
+      - name: Upload IPA as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirCard-iOS-ipa
+          path: build/AirCard-iOS.ipa
+          # 保存期間を短くしてストレージ消費を抑える
+          retention-days: 7
