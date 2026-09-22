@@ -23,6 +23,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Debug - show workspace contents
+        # build-ipa.shが実際に存在するか、どのブランチ/コミットが
+        # チェックアウトされているかをここで確定させる
+        run: |
+          echo "Current ref:"
+          git rev-parse --abbrev-ref HEAD
+          git log -1 --oneline
+          echo "---"
+          echo "Workspace contents:"
+          ls -la
+
       - name: Select Xcode version
         # ランナーのイメージ更新でプリインストール済みバージョンは変わるため、
         # 固定バージョンを決め打ちせず「そのランナーにある最新安定版」を使う。
