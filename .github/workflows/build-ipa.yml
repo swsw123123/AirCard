@@ -22,6 +22,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 自分のForkが本家と同期できているか分からない状態を切り分けから
+          # 除外するため、本家(Mak5er/AirCard-iOS)のmainを直接取得する。
+          # 自分のFork独自の変更を反映させたい場合は、以下2行を消すか
+          # 自分のFork(owner/AirCard-iOS)とブランチ名に書き換える
+          repository: Mak5er/AirCard-iOS
+          ref: main
 
       - name: Debug - show workspace contents
         # build-ipa.shが実際に存在するか、どのブランチ/コミットが
