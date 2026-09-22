@@ -67,6 +67,53 @@ jobs:
           chmod +x build-ipa.sh
           ./build-ipa.sh
 
+      - name: Normalize IPA (force Payload/*.app layout)
+        # build-ipa.sh の出力が Payload を欠いていても、
+        # Sideloadlyが受け付ける正しいIPA構造に包み直す
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/ipa && mkdir -p /tmp/ipa/extract /tmp/ipa/out/Payload
+          unzip -q build/AirCard-iOS.ipa -d /tmp/ipa/extract
+          APP=$(find /tmp/ipa/extract -maxdepth 3 -type d -name '*.app' | head -n1 || true)
+          if [ -n "$APP" ]; then
+            echo "Found app bundle: $APP"
+            cp -R "$APP" /tmp/ipa/out/Payload/
+          elif [ -f /tmp/ipa/extract/Info.plist ]; then
+            echo ".app の中身がzip直下にあるため AirCard-iOS.app として包み直します"
+            mkdir -p /tmp/ipa/out/Payload/AirCard-iOS.app
+            cp -R /tmp/ipa/extract/. /tmp/ipa/out/Payload/AirCard-iOS.app/
+          else
+            echo "::error::.app バンドルが見つかりません"
+            exit 1
+          fi
+          # -y でシンボリックリンクを保持したまま圧縮
+          (cd /tmp/ipa/out && zip -qry ../AirCard-iOS.ipa Payload)
+          mv /tmp/ipa/AirCard-iOS.ipa build/AirCard-iOS.ipa
+          unzip -l build/AirCard-iOS.ipa | head -n 15
+
+      - name: Validate IPA structure
+        # Sideloadlyの「Invalid file」を事前に防ぐため、
+        # IPAが Payload/*.app 構造で、実機(iphoneos/arm64)向けかを確認する
+        run: |
+          IPA=build/AirCard-iOS.ipa
+          echo "== IPA file =="
+          ls -la "$IPA"
+          file "$IPA"
+          echo "== Top-level entries =="
+          unzip -l "$IPA" | head -n 30
+          if ! unzip -l "$IPA" | grep -qE ' Payload/[^/]+\.app/'; then
+            echo "::error::Payload/*.app が見つかりません。IPAの構造が不正です"
+            exit 1
+          fi
+          rm -rf /tmp/ipacheck && mkdir /tmp/ipacheck
+          unzip -q "$IPA" -d /tmp/ipacheck
+          APP=$(ls -d /tmp/ipacheck/Payload/*.app | head -n1)
+          EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          echo "== Executable architecture =="
+          lipo -info "$APP/$EXE"
+          echo "== Platform =="
+          /usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$APP/Info.plist" || true
+
       - name: Upload IPA as artifact
         uses: actions/upload-artifact@v4
         with:
